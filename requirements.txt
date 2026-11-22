@@ -1,0 +1,21 @@
+# --- Core (runs anywhere, incl. the 4GB laptop) ---
+numpy
+pandas
+scikit-learn
+tqdm
+requests
+python-dotenv
+
+# --- Frontier baseline: OpenRouter via the OpenAI-compatible API ---
+openai>=1.40
+
+# --- Plotting (reliability diagrams, curves) ---
+matplotlib
+
+# --- Modeling / fine-tuning: install on the RENTED GPU box, not the laptop ---
+# torch                 # install the CUDA build that matches the rented GPU
+# transformers>=4.44
+# datasets
+# accelerate
+# peft
+# bitsandbytes          # for 4-bit QLoRA if needed

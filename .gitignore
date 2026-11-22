@@ -1,0 +1,28 @@
+# Secrets
+.env
+*.key
+
+# Data & model artifacts (large)
+data/raw/
+data/processed/
+checkpoints/
+outputs/
+runs/
+wandb/
+*.ckpt
+*.safetensors
+*.bin
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

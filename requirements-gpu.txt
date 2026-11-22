@@ -1,0 +1,26 @@
+# Install on the RENTED GPU box (not the laptop). Assumes a CUDA 12.x image.
+# PyTorch: install the CUDA build first, then the rest.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+#   pip install -r requirements-gpu.txt
+
+# --- core (same as requirements.txt) ---
+numpy
+pandas
+pyarrow
+scikit-learn
+scipy
+tqdm
+requests
+python-dotenv
+openai>=1.40
+matplotlib
+tensorboard            # live training curves (default --report tensorboard)
+# wandb                # optional remote dashboard: pip install wandb; wandb login; --report wandb
+
+# --- modeling / fine-tuning ---
+transformers>=4.44,<5
+datasets>=2.20
+accelerate>=0.33
+peft>=0.12
+sentencepiece          # required by DeBERTa-v3 tokenizer
+bitsandbytes>=0.43     # only needed for --load-4bit (QLoRA on bigger backbones)
