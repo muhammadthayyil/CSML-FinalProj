@@ -57,6 +57,7 @@ def main():
             Trainer,
             TrainingArguments,
         )
+        from transformers.trainer_utils import get_last_checkpoint
     except ImportError as e:
         raise SystemExit(f"Missing ML deps ({e}). See the module docstring for the pip line.")
 
@@ -127,7 +128,14 @@ def main():
         compute_metrics=compute_metrics,
         callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)],
     )
-    trainer.train()
+    # Auto-resume: if a rerun finds a valid checkpoint in output_dir, continue from it;
+    # otherwise None = fresh start.
+    last_ckpt = get_last_checkpoint(str(ckpt_dir)) if ckpt_dir.exists() else None
+    if last_ckpt:
+        print(f"Found checkpoint — resuming from {last_ckpt}")
+    else:
+        print("No checkpoint found — training from scratch")
+    trainer.train(resume_from_checkpoint=last_ckpt)
 
     # ---- calibrate on val, evaluate on test ----------------------------------
     val_logits = np.asarray(trainer.predict(ds["val"]).predictions, dtype=np.float64)

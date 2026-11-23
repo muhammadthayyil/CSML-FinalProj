@@ -10,12 +10,15 @@ neither limit. Budget: **one afternoon, a few dollars.**
 
 | Option | GPU | Good for | Rough cost |
 |--------|-----|----------|-----------|
-| Minimum | **T4 16 GB** (or free Colab T4) | DeBERTa + Qwen2.5-0.5B | ~$0.20–0.40/hr |
-| **Recommended** | **L4 24 GB** or **A10 24 GB** | all backbones incl. 1.5B–3B | ~$0.40–0.80/hr |
-| Overkill | A100 40/80 GB | only if you push to 7B+ | ~$1.50–3/hr |
+| Minimum | **T4 16 GB** (or free Colab T4) | DeBERTa + Qwen2.5-0.5B only | ~$0.20–0.40/hr |
+| Mid | **L4 24 GB** or **A10 24 GB** | up to 1.5B–3B LoRA | ~$0.40–0.80/hr |
+| **Recommended (our choice)** | **A40 48 GB** (or A6000 48 GB) | the **full 0.5B→7B sweep** in bf16 LoRA, no 4-bit | ~$0.40–0.80/hr |
+| Overkill | A100 80 GB | only if you go past 7B | ~$1.50–3/hr |
 
 **You do not need multiple GPUs.** Providers: RunPod, Lambda, Vast.ai, Paperspace.
-Pick a **PyTorch 2.x / CUDA 12.x** base image so CUDA is already set up.
+Pick a **PyTorch 2.x / CUDA 12.x** base image so CUDA is already set up. The A40's 48 GB
+holds a frozen 7B backbone (~14 GB bf16) plus the LoRA adapters and activations with
+headroom, so **7B needs no 4-bit quantization** — run every size in plain bf16 LoRA.
 
 Sanity check once you're on the box:
 ```bash
@@ -52,6 +55,16 @@ pip install --upgrade pip
 pip install torch --index-url https://download.pytorch.org/whl/cu121   # CUDA build
 pip install -r requirements-gpu.txt
 ```
+
+**On a network / persistent volume?** Point the Hugging Face cache at it so the model
+weights (the 7B is ~15 GB) download **once** and survive pod restarts and re-attaching to a
+new machine:
+```bash
+export HF_HOME=/persistent/hf        # match your volume's actual mount path
+```
+Add that line to `~/.bashrc` (or re-export it each session) so every run reuses the cache
+instead of re-downloading. Keep the repo and `outputs/` on the volume too, and your results
+survive even if you forget to copy before terminating.
 
 Create `.env` **on the box** with your key (use a **rotated** key — the old one was pasted
 in chat):
@@ -92,9 +105,10 @@ If all five finish and write to `outputs/`, you're green for the full run.
 ## 5. Full run (produces the results table)
 
 ```bash
-# 1) System One reproduction (ours) — ~1–2 h on an L4
+# 1) System One reproduction (ours) — ~1–2 h on the A40 for 0.5B
 python -m src.sysone.train --base Qwen/Qwen2.5-0.5B --epochs 3 --bs 16
-#    bigger backbone (optional):  --base Qwen/Qwen2.5-1.5B --bs 8 --load-4bit
+#    bigger backbone on the A40 (bf16 LoRA, no 4-bit needed):
+#      --base Qwen/Qwen2.5-7B --bs 8 --grad-checkpoint
 
 # 2) Encoder baseline — ~30–60 min
 python -m src.baselines.encoder --base microsoft/deberta-v3-small --epochs 3 --bs 16
@@ -154,6 +168,17 @@ for M in Qwen/Qwen2.5-0.5B Qwen/Qwen2.5-1.5B Qwen/Qwen2.5-3B Qwen/Qwen2.5-7B; do
 done
 python -m src.report        # -> outputs/results_table.md across all sizes + baselines
 ```
+
+> **Disk during the sweep:** the four backbones together are ~25 GB of weights. With
+> `HF_HOME` on your persistent volume they're cached once and reused — nothing to manage.
+> On a small ephemeral disk instead, clear each size's weights before the next so you don't
+> fill up:
+> ```bash
+> rm -rf "$HF_HOME"/hub/models--Qwen--Qwen2.5-0.5B    # (or ~/.cache/huggingface/hub/... if HF_HOME is unset)
+> ```
+> The LoRA checkpoints themselves are tiny (adapter only, a few hundred MB each), so
+> `checkpoints/` stays small regardless.
+
 Each backbone writes its own `outputs/sysone_<size>.json`, so the table shows accuracy /
 macro-F1 / ECE / latency per size next to Jev, DeBERTa, and the frontier LLM — exactly the
 "does 7B beat 1.5B enough to justify it?" comparison.
@@ -186,6 +211,6 @@ all you need next; re-renting to re-run is cheap.
 ## Hyperparameters worth sweeping (if you have time)
 
 - `--max-per-class` in data prep (class balance vs. data volume)
-- System One: `--lora-r` {16,32,64}, `--epochs` {2,3,4}, backbone {0.5B, 1.5B}
+- System One: `--lora-r` {16,32,64}, `--epochs` {2,3,4}, backbone {0.5B, 1.5B, 3B, 7B}
 - A **data-efficiency curve** (`--train-size` 500/1k/5k/all) is a cheap extra figure that
   strengthens the paper.
